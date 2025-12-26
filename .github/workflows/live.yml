@@ -1,10 +1,10 @@
-name: Live Relay YouTube Ultra Bypass
+name: YouTube Relay Pro Cookies
 
 on:
   workflow_dispatch:
     inputs:
       link_youtube:
-        description: 'Tempel Link YouTube'
+        description: 'Link YouTube'
         required: true
       kunci_rtmp:
         description: 'Stream Key YouTube'
@@ -14,35 +14,30 @@ jobs:
   streaming:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Tool Terbaru
+      - name: Install Tool
         run: |
-          sudo apt update
-          sudo apt install ffmpeg -y
-          # Pakai versi yt-dlp yang paling fresh (Master)
+          sudo apt update && sudo apt install ffmpeg -y
           sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
 
-      - name: Eksekusi Direct Bypass
+      - name: Eksekusi Relay (Pakai Cookies)
         run: |
-          # 1. Bersihkan ID Video
-          INPUT="${{ github.event.inputs.link_youtube }}"
-          VIDEO_ID=$(echo "$INPUT" | sed -E 's/.*(\/|v=)([a-zA-Z0-9_-]{11}).*/\2/' | cut -c1-11)
-          echo "Target ID: $VIDEO_ID"
+          # Ambil cookies dari Secret GitHub dan buat jadi file
+          echo "${{ secrets.YT_COOKIES }}" > cookies.txt
 
-          # 2. Ambil Link Mentah dengan trik 'No-Check-Certificate' dan 'Mweb'
-          # Teknik ini meniru browser HP jadul yang biasanya gak dicek ketat sama YouTube
-          VIDEO_URL=$(yt-dlp --no-check-certificates \
-          --geo-bypass \
-          --extractor-args "youtube:player_client=mweb,android;player_skip=webpage_signature" \
-          -f "best[height<=720]" -g "https://www.youtube.com/watch?v=$VIDEO_ID")
+          # Ambil link video dengan identitas akun kamu
+          VIDEO_URL=$(yt-dlp --cookies cookies.txt \
+          --no-check-certificates \
+          --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36" \
+          -f "best[height<=720]" -g "${{ github.event.inputs.link_youtube }}")
 
-          # 3. Cek hasil dan jalankan FFmpeg
+          # Jika link didapat, langsung gas streaming
           if [ -z "$VIDEO_URL" ]; then
-            echo "Bypass gagal. Menggunakan protokol darurat..."
+            echo "ERROR: Cookies tidak valid atau kadaluwarsa!"
             exit 1
           fi
 
-          echo "Bypass Berhasil! Memulai Streaming..."
+          echo "Bypass Berhasil! Link didapatkan. Memulai Live..."
           
           ffmpeg -re -i "$VIDEO_URL" \
           -c:v libx264 -preset veryfast -b:v 2500k \
