@@ -1,37 +1,19 @@
-name: YouTube Relay Suara Asli Pro
-
-on:
-  workflow_dispatch:
-    inputs:
-      link_youtube:
-        description: 'Tempel Link Video YouTube'
-        required: true
-      kunci_rtmp:
-        description: 'Stream Key YouTube Kamu'
-        required: true
-
-jobs:
-  streaming:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install Tool Terbaru
+      - name: Eksekusi Bypass OAuth2
         run: |
-          sudo apt update
-          sudo apt install ffmpeg jq -y
-          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-          sudo chmod a+rx /usr/local/bin/yt-dlp
-
-      - name: Eksekusi Bypass & Relay
-        run: |
-          # 1. Ambil URL Video & Audio (Digabung oleh yt-dlp)
-          # Kita pakai format 'best' agar audio dan video otomatis terambil
-          VIDEO_URL=$(yt-dlp --no-check-certificates \
-          --extractor-args "youtube:player_client=tv,android;player_skip=webpage_signature" \
-          --user-agent "Mozilla/5.0 (Chromecast; Google TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36" \
-          -f "best[height<=720]" -g "${{ github.event.inputs.link_youtube }}")
+          # Perintah ini akan mencoba mengambil link dengan simulasi akses YouTube TV
+          # Jika IP GitHub diblokir total, kita gunakan trik 'm3u8' tapi linknya didapat dari API publik
           
-          # 2. Kirim ke YouTube (Pakai Suara Asli)
-          # Kita hilangkan perintah 'anullsrc' dan 'map' yang ribet tadi
+          VIDEO_ID="KzsbAUx6mAE" # ID Video kamu
+          
+          # Menggunakan API Invidious (Jembatan) agar tidak kena deteksi IP GitHub
+          # Invidious adalah jembatan yang sering dipakai script pro untuk nembus blokir IP
+          VIDEO_URL=$(curl -s "https://invidious.outfinitiv.net/api/v1/videos/$VIDEO_ID" | jq -r '.formatStreams[] | select(.quality == "720p") | .url' | head -n 1)
+
+          if [ -z "$VIDEO_URL" ] || [ "$VIDEO_URL" == "null" ]; then
+             echo "Gagal tembus lewat Invidious, mencoba jalur cadangan..."
+             VIDEO_URL=$(yt-dlp --no-check-certificates --username "oauth2" --password "" -f "best[height<=720]" -g "https://www.youtube.com/watch?v=$VIDEO_ID")
+          fi
+          
           ffmpeg -re -i "$VIDEO_URL" \
           -c:v libx264 -preset veryfast -b:v 2500k \
           -c:a aac -ar 44100 -b:a 128k \
