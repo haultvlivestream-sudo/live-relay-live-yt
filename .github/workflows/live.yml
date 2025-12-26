@@ -1,20 +1,36 @@
-      - name: Eksekusi Bypass OAuth2
+      - name: Eksekusi Bypass Multi-Bridge
         run: |
-          # Perintah ini akan mencoba mengambil link dengan simulasi akses YouTube TV
-          # Jika IP GitHub diblokir total, kita gunakan trik 'm3u8' tapi linknya didapat dari API publik
-          
-          VIDEO_ID="KzsbAUx6mAE" # ID Video kamu
-          
-          # Menggunakan API Invidious (Jembatan) agar tidak kena deteksi IP GitHub
-          # Invidious adalah jembatan yang sering dipakai script pro untuk nembus blokir IP
-          VIDEO_URL=$(curl -s "https://invidious.outfinitiv.net/api/v1/videos/$VIDEO_ID" | jq -r '.formatStreams[] | select(.quality == "720p") | .url' | head -n 1)
+          # Ambil ID Video dari Link yang diinput user
+          LINK="${{ github.event.inputs.link_youtube }}"
+          VIDEO_ID=$(echo $LINK | sed -n 's/.*v=\([^&]*\).*/\1/p; s/.*youtu.be\/\([^?]*\).*/\1/p')
+
+          echo "Mencoba menembus YouTube untuk ID: $VIDEO_ID"
+
+          # Daftar "Pintu Belakang" (Invidious Instances)
+          INSTANCES=(
+            "https://inv.tux.rs"
+            "https://invidious.nerdvpn.de"
+            "https://invidious.flokinet.to"
+          )
+
+          VIDEO_URL=""
+          for srv in "${INSTANCES[@]}"; do
+            echo "Mencoba lewat server: $srv"
+            VIDEO_URL=$(curl -s "$srv/api/v1/videos/$VIDEO_ID" | jq -r '.formatStreams[] | select(.container == "mp4") | .url' | head -n 1)
+            if [ ! -z "$VIDEO_URL" ] && [ "$VIDEO_URL" != "null" ]; then
+              echo "Berhasil mendapatkan link dari $srv"
+              break
+            fi
+          done
 
           if [ -z "$VIDEO_URL" ] || [ "$VIDEO_URL" == "null" ]; then
-             echo "Gagal tembus lewat Invidious, mencoba jalur cadangan..."
-             VIDEO_URL=$(yt-dlp --no-check-certificates --username "oauth2" --password "" -f "best[height<=720]" -g "https://www.youtube.com/watch?v=$VIDEO_ID")
+            echo "Semua jembatan gagal, menggunakan cara terakhir (yt-dlp Android)..."
+            VIDEO_URL=$(yt-dlp -g --no-check-certificates --extractor-args "youtube:player_client=android" -f "best" "$LINK")
           fi
-          
+
+          # Mulai Live Stream
           ffmpeg -re -i "$VIDEO_URL" \
           -c:v libx264 -preset veryfast -b:v 2500k \
           -c:a aac -ar 44100 -b:a 128k \
           -f flv "rtmp://a.rtmp.youtube.com/live2/${{ github.event.inputs.kunci_rtmp }}"
+          
