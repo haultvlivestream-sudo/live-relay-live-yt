@@ -1,10 +1,10 @@
-name: Live Relay YouTube Bypass FIXED
+name: Live Relay YouTube Ultra Bypass
 
 on:
   workflow_dispatch:
     inputs:
       link_youtube:
-        description: 'Tempel Link YouTube (Bebas format apa saja)'
+        description: 'Tempel Link YouTube'
         required: true
       kunci_rtmp:
         description: 'Stream Key YouTube'
@@ -14,51 +14,37 @@ jobs:
   streaming:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Tool
-        run: sudo apt update && sudo apt install ffmpeg jq -y
-
-      - name: Eksekusi Bypass
+      - name: Install Tool Terbaru
         run: |
-          # 1. LOGIKA PEMBERSIH ID VIDEO (SANGAT KUAT)
+          sudo apt update
+          sudo apt install ffmpeg -y
+          # Pakai versi yt-dlp yang paling fresh (Master)
+          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
+
+      - name: Eksekusi Direct Bypass
+        run: |
+          # 1. Bersihkan ID Video
           INPUT="${{ github.event.inputs.link_youtube }}"
-          
-          # Hapus semua karakter sebelum ID
-          ID=$(echo "$INPUT" | sed -E 's/.*(\/|v=)([a-zA-Z0-9_-]{11}).*/\2/')
-          
-          # Jika hasil sed masih kepanjangan, ambil 11 karakter pertama saja
-          VIDEO_ID=$(echo "$ID" | cut -c1-11)
+          VIDEO_ID=$(echo "$INPUT" | sed -E 's/.*(\/|v=)([a-zA-Z0-9_-]{11}).*/\2/' | cut -c1-11)
+          echo "Target ID: $VIDEO_ID"
 
-          echo "ID Video yang akan digunakan: $VIDEO_ID"
+          # 2. Ambil Link Mentah dengan trik 'No-Check-Certificate' dan 'Mweb'
+          # Teknik ini meniru browser HP jadul yang biasanya gak dicek ketat sama YouTube
+          VIDEO_URL=$(yt-dlp --no-check-certificates \
+          --geo-bypass \
+          --extractor-args "youtube:player_client=mweb,android;player_skip=webpage_signature" \
+          -f "best[height<=720]" -g "https://www.youtube.com/watch?v=$VIDEO_ID")
 
-          # 2. Daftar Jembatan Terkuat
-          INSTANCES=(
-            "https://invidious.asir.dev"
-            "https://inv.tux.rs"
-            "https://invidious.projectsegfau.lt"
-            "https://yewtu.be"
-          )
-
-          VIDEO_URL=""
-          for srv in "${INSTANCES[@]}"; do
-            echo "Mencoba lewat: $srv"
-            # Ambil data API
-            RAW_DATA=$(curl -sL "$srv/api/v1/videos/$VIDEO_ID")
-            # Cari URL format MP4
-            VIDEO_URL=$(echo "$RAW_DATA" | jq -r '.formatStreams[] | select(.container == "mp4") | .url' | head -n 1)
-            
-            if [[ ! -z "$VIDEO_URL" && "$VIDEO_URL" != "null" ]]; then
-              echo "BERHASIL! Link didapatkan dari $srv"
-              break
-            fi
-          done
-
-          # 3. Eksekusi Live dengan FFmpeg
-          if [[ ! -z "$VIDEO_URL" && "$VIDEO_URL" != "null" ]]; then
-            ffmpeg -re -i "$VIDEO_URL" \
-            -c:v libx264 -preset veryfast -b:v 2500k \
-            -c:a aac -ar 44100 -b:a 128k \
-            -f flv "rtmp://a.rtmp.youtube.com/live2/${{ github.event.inputs.kunci_rtmp }}"
-          else
-            echo "ERROR: Semua jembatan gagal. YouTube mungkin sangat ketat hari ini."
+          # 3. Cek hasil dan jalankan FFmpeg
+          if [ -z "$VIDEO_URL" ]; then
+            echo "Bypass gagal. Menggunakan protokol darurat..."
             exit 1
           fi
+
+          echo "Bypass Berhasil! Memulai Streaming..."
+          
+          ffmpeg -re -i "$VIDEO_URL" \
+          -c:v libx264 -preset veryfast -b:v 2500k \
+          -c:a aac -ar 44100 -b:a 128k \
+          -f flv "rtmp://a.rtmp.youtube.com/live2/${{ github.event.inputs.kunci_rtmp }}"
