@@ -1,10 +1,10 @@
-name: Live Relay YouTube Bypass V3
+name: Live Relay YouTube Bypass FIXED
 
 on:
   workflow_dispatch:
     inputs:
       link_youtube:
-        description: 'Tempel Link Video YouTube'
+        description: 'Tempel Link YouTube (Bebas format apa saja)'
         required: true
       kunci_rtmp:
         description: 'Stream Key YouTube'
@@ -19,31 +19,31 @@ jobs:
 
       - name: Eksekusi Bypass
         run: |
-          # 1. Cara ambil ID yang lebih kuat
-          INPUT_URL="${{ github.event.inputs.link_youtube }}"
-          if [[ $INPUT_URL == *"v="* ]]; then
-            VIDEO_ID=$(echo "$INPUT_URL" | sed 's/.*v=\([^&]*\).*/\1/')
-          elif [[ $INPUT_URL == *"youtu.be/"* ]]; then
-            VIDEO_ID=$(echo "$INPUT_URL" | sed 's/.*youtu.be\/\([^?]*\).*/\1/')
-          else
-            VIDEO_ID="$INPUT_URL" # Jika user cuma masukin ID-nya doang
-          fi
+          # 1. LOGIKA PEMBERSIH ID VIDEO (SANGAT KUAT)
+          INPUT="${{ github.event.inputs.link_youtube }}"
+          
+          # Hapus semua karakter sebelum ID
+          ID=$(echo "$INPUT" | sed -E 's/.*(\/|v=)([a-zA-Z0-9_-]{11}).*/\2/')
+          
+          # Jika hasil sed masih kepanjangan, ambil 11 karakter pertama saja
+          VIDEO_ID=$(echo "$ID" | cut -c1-11)
 
-          echo "ID Video terdeteksi: $VIDEO_ID"
+          echo "ID Video yang akan digunakan: $VIDEO_ID"
 
-          # 2. Daftar Jembatan yang paling aktif Desember 2025
-          # Kita coba ambil MP4 kualitas terbaik
+          # 2. Daftar Jembatan Terkuat
           INSTANCES=(
             "https://invidious.asir.dev"
             "https://inv.tux.rs"
             "https://invidious.projectsegfau.lt"
+            "https://yewtu.be"
           )
 
           VIDEO_URL=""
           for srv in "${INSTANCES[@]}"; do
             echo "Mencoba lewat: $srv"
-            # Ambil URL format MP4 720p atau 360p
+            # Ambil data API
             RAW_DATA=$(curl -sL "$srv/api/v1/videos/$VIDEO_ID")
+            # Cari URL format MP4
             VIDEO_URL=$(echo "$RAW_DATA" | jq -r '.formatStreams[] | select(.container == "mp4") | .url' | head -n 1)
             
             if [[ ! -z "$VIDEO_URL" && "$VIDEO_URL" != "null" ]]; then
@@ -52,13 +52,13 @@ jobs:
             fi
           done
 
-          # 3. Eksekusi Live
+          # 3. Eksekusi Live dengan FFmpeg
           if [[ ! -z "$VIDEO_URL" && "$VIDEO_URL" != "null" ]]; then
             ffmpeg -re -i "$VIDEO_URL" \
             -c:v libx264 -preset veryfast -b:v 2500k \
             -c:a aac -ar 44100 -b:a 128k \
             -f flv "rtmp://a.rtmp.youtube.com/live2/${{ github.event.inputs.kunci_rtmp }}"
           else
-            echo "Gagal total: Semua jembatan diblokir atau ID salah."
+            echo "ERROR: Semua jembatan gagal. YouTube mungkin sangat ketat hari ini."
             exit 1
           fi
